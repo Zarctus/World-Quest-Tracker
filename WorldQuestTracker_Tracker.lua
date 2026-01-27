@@ -393,8 +393,7 @@ routeButton:Show()
 
 routeButton.icon = routeButton:CreateTexture(nil, "artwork")
 routeButton.icon:SetAllPoints()
-routeButton.icon:SetTexture([[Interface\Minimap\Tracking\Banker]])
-routeButton.icon:SetTexCoord(0.1, 0.9, 0.1, 0.9)
+routeButton.icon:SetAtlas("Warfronts-BaseMapIcons-Horde-Workshop-Minimap")
 
 routeButton.highlight = routeButton:CreateTexture(nil, "highlight")
 routeButton.highlight:SetAllPoints()
@@ -412,10 +411,10 @@ routeButton:SetScript("OnClick", function(self)
 	WorldQuestTracker.ToggleRouteMode()
 	if (WorldQuestTracker.RouteEnabled) then
 		self.activeGlow:Show()
-		self.icon:SetTexture([[Interface\Minimap\Tracking\FlightMaster]])
+		self.icon:SetAtlas("Warfronts-BaseMapIcons-Horde-Workshop-Minimap")
 	else
 		self.activeGlow:Hide()
-		self.icon:SetTexture([[Interface\Minimap\Tracking\Banker]])
+		self.icon:SetAtlas("Warfronts-BaseMapIcons-Horde-Workshop-Minimap")
 	end
 end)
 
@@ -1095,25 +1094,16 @@ function WorldQuestTracker.GetOrCreateTrackerWidget (index)
 
 	------------------------
 	
-	-- Route Order Badge (for optimal route planner) - positioned on the right side
+	-- Route Order Badge (for optimal route planner) - positioned on the reward icon
 	f.RouteOrderBadge = CreateFrame("frame", nil, f, "BackdropTemplate")
-	f.RouteOrderBadge:SetSize(16, 16)
-	f.RouteOrderBadge:SetPoint("right", f.TomTomTrackerIcon, "left", -4, 0)
-	f.RouteOrderBadge:SetFrameLevel(f:GetFrameLevel() + 5)
-	
-	f.RouteOrderBadge.bg = f.RouteOrderBadge:CreateTexture(nil, "background")
-	f.RouteOrderBadge.bg:SetAllPoints()
-	f.RouteOrderBadge.bg:SetColorTexture(0.1, 0.5, 0.1, 0.9)
-	
-	f.RouteOrderBadge.border = f.RouteOrderBadge:CreateTexture(nil, "border")
-	f.RouteOrderBadge.border:SetPoint("topleft", -1, 1)
-	f.RouteOrderBadge.border:SetPoint("bottomright", 1, -1)
-	f.RouteOrderBadge.border:SetColorTexture(0.3, 0.9, 0.3, 1)
+	f.RouteOrderBadge:SetSize(14, 14)
+	f.RouteOrderBadge:SetPoint("bottomright", f.Circle, "bottomright", 2, 0)
+	f.RouteOrderBadge:SetFrameLevel(f:GetFrameLevel() + 10)
 	
 	f.RouteOrderBadge.text = f.RouteOrderBadge:CreateFontString(nil, "overlay", "GameFontNormalSmall")
 	f.RouteOrderBadge.text:SetPoint("center", f.RouteOrderBadge, "center", 0, 0)
 	f.RouteOrderBadge.text:SetTextColor(1, 1, 1, 1)
-	f.RouteOrderBadge.text:SetFont(GameFontNormal:GetFont(), 11, "OUTLINE")
+	f.RouteOrderBadge.text:SetFont(GameFontNormal:GetFont(), 12, "THICKOUTLINE")
 	
 	f.RouteOrderBadge:Hide()
 
