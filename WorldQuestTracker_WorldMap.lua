@@ -147,8 +147,9 @@ end
 --when a square is hover hovered in the world map, find the circular quest button in the world map and highlight it
 function WorldQuestTracker.HighlightOnWorldMap(questID, scale, color)
 	scale = scale or 1
-	for questCounter, button in pairs(WorldQuestTracker.WorldMapSmallWidgets) do
-		if (button.questID == questID) then
+	for i = 1, #WorldQuestTracker.WorldMapSmallWidgets do
+		local button = WorldQuestTracker.WorldMapSmallWidgets[i]
+		if (button and button.questID == questID) then
 			--print(button.x, button.y)
 			do_highlight_on_quest(button, scale, color)
 		end

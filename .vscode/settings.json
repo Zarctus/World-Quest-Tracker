@@ -125,6 +125,7 @@
         "CreateUnsecuredRegionPoolInstance",
         "CreateFramePool",
         "AddonCompartmentFrame",
-        "ChatFrame1"
+        "ChatFrame1",
+        "STANDARD_TEXT_FONT"
     ]
 }

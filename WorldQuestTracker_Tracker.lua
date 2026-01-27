@@ -188,21 +188,24 @@ function WorldQuestTracker.RemoveAllQuestsFromTracker()
 
 		if (isShowingWorld) then
 			--quest locations
-			for _, widget in pairs (WorldQuestTracker.WorldMapSmallWidgets) do
-				if (widget:IsShown() and widget.questID == questID) then
+			for i = 1, #WorldQuestTracker.WorldMapSmallWidgets do
+				local widget = WorldQuestTracker.WorldMapSmallWidgets[i]
+				if (widget and widget:IsShown() and widget.questID == questID) then
 					widget.onEndTrackAnimation:Play()
 				end
 			end
 			--quest summary
-			for _, summarySquare in pairs (WorldQuestTracker.WorldSummaryQuestsSquares) do
-				if (summarySquare:IsShown() and summarySquare.questID == questID) then
+			for i = 1, #WorldQuestTracker.WorldSummaryQuestsSquares do
+				local summarySquare = WorldQuestTracker.WorldSummaryQuestsSquares[i]
+				if (summarySquare and summarySquare:IsShown() and summarySquare.questID == questID) then
 					summarySquare.onEndTrackAnimation:Play()
 				end
 			end
 		else
 			--zone map widgets
-			for _, widget in pairs (WorldQuestTracker.ZoneWidgetPool) do
-				if (widget:IsShown() and widget.questID == questID) then
+			for i = 1, #WorldQuestTracker.ZoneWidgetPool do
+				local widget = WorldQuestTracker.ZoneWidgetPool[i]
+				if (widget and widget:IsShown() and widget.questID == questID) then
 					widget.onEndTrackAnimation:Play()
 				end
 			end
@@ -275,7 +278,29 @@ function WorldQuestTracker.ReorderQuestsOnTracker()
 	for index, quest in ipairs (WorldQuestTracker.QuestTrackList) do
 		quest.LastDistance = quest.LastDistance or 0
 	end
-	table.sort (WorldQuestTracker.QuestTrackList, Sort_QuestsOnTracker)
+	
+	-- If route mode is enabled, sort by optimal route order instead
+	if (WorldQuestTracker.RouteEnabled and #WorldQuestTracker.OptimalRoute > 0) then
+		local Sort_ByOptimalRoute = function(t1, t2)
+			-- Quests on current map with route order come first
+			local hasRoute1 = t1.mapID == Sort_currentMapID and t1.routeOrder
+			local hasRoute2 = t2.mapID == Sort_currentMapID and t2.routeOrder
+			
+			if (hasRoute1 and hasRoute2) then
+				return t1.routeOrder < t2.routeOrder
+			elseif (hasRoute1) then
+				return true
+			elseif (hasRoute2) then
+				return false
+			else
+				-- Fallback to default sorting for quests not on current map
+				return Sort_QuestsOnTracker(t1, t2)
+			end
+		end
+		table.sort(WorldQuestTracker.QuestTrackList, Sort_ByOptimalRoute)
+	else
+		table.sort(WorldQuestTracker.QuestTrackList, Sort_QuestsOnTracker)
+	end
 end
 
 --~trackerframe
@@ -358,6 +383,79 @@ minimizeButton:SetPushedTexture ([[Interface\Buttons\UI-Panel-QuestHideButton]])
 minimizeButton:GetPushedTexture():SetTexCoord(0.5, 1, 0.5, 1)
 minimizeButton:SetHighlightTexture ([[Interface\Buttons\UI-Panel-MinimizeButton-Highlight]])
 minimizeButton:SetDisabledTexture ([[Interface\Buttons\UI-Panel-QuestHideButton-disabled]])
+
+-- Create Route Button on tracker header (next to minimize button)
+local routeButton = CreateFrame("button", "WorldQuestTrackerRouteButton", WorldQuestTrackerHeader, "BackdropTemplate")
+routeButton:SetSize(16, 16)
+routeButton:SetPoint("topright", WorldQuestTrackerHeader, "topright", -22, -4)
+routeButton:SetFrameLevel(WorldQuestTrackerHeader:GetFrameLevel() + 10)
+routeButton:Show()
+
+routeButton.icon = routeButton:CreateTexture(nil, "artwork")
+routeButton.icon:SetAllPoints()
+routeButton.icon:SetTexture([[Interface\Minimap\Tracking\Banker]])
+routeButton.icon:SetTexCoord(0.1, 0.9, 0.1, 0.9)
+
+routeButton.highlight = routeButton:CreateTexture(nil, "highlight")
+routeButton.highlight:SetAllPoints()
+routeButton.highlight:SetTexture([[Interface\Buttons\UI-Common-MouseHilight]])
+routeButton.highlight:SetBlendMode("ADD")
+routeButton.highlight:SetAlpha(0.5)
+
+routeButton.activeGlow = routeButton:CreateTexture(nil, "background")
+routeButton.activeGlow:SetPoint("center")
+routeButton.activeGlow:SetSize(20, 20)
+routeButton.activeGlow:SetColorTexture(0.2, 0.8, 0.2, 0.4)
+routeButton.activeGlow:Hide()
+
+routeButton:SetScript("OnClick", function(self)
+	WorldQuestTracker.ToggleRouteMode()
+	if (WorldQuestTracker.RouteEnabled) then
+		self.activeGlow:Show()
+		self.icon:SetTexture([[Interface\Minimap\Tracking\FlightMaster]])
+	else
+		self.activeGlow:Hide()
+		self.icon:SetTexture([[Interface\Minimap\Tracking\Banker]])
+	end
+end)
+
+routeButton:SetScript("OnEnter", function(self)
+	GameTooltip:SetOwner(self, "ANCHOR_LEFT")
+	GameTooltip:AddLine("Route Optimale", 1, 1, 1)
+	if (WorldQuestTracker.RouteEnabled) then
+		GameTooltip:AddLine("Cliquez pour désactiver", 0.8, 0.8, 0.8)
+		local route = WorldQuestTracker.OptimalRoute
+		if (route and #route > 0) then
+			GameTooltip:AddLine(" ")
+			GameTooltip:AddLine("Parcours optimal:", 0, 1, 0)
+			for i, questData in ipairs(route) do
+				local title = C_TaskQuest.GetQuestInfoByQuestID(questData.questID) or "Unknown"
+				local distStr = string.format("%dyds", math.floor(questData.distanceFromPrevious or 0))
+				if ((questData.distanceFromPrevious or 0) > 1000) then
+					distStr = string.format("%.1fkm", (questData.distanceFromPrevious or 0) / 1000)
+				end
+				GameTooltip:AddDoubleLine(string.format("%d. %s", i, title:sub(1, 25)), distStr, 1, 1, 1, 0.7, 0.7, 0.7)
+			end
+			GameTooltip:AddLine(" ")
+			local totalDist = WorldQuestTracker.GetRouteTotalDistance and WorldQuestTracker.GetRouteTotalDistance() or 0
+			local totalStr = totalDist > 1000 and string.format("%.1fkm", totalDist / 1000) or string.format("%dyds", math.floor(totalDist))
+			GameTooltip:AddDoubleLine("Distance totale:", totalStr, 1, 0.8, 0, 1, 0.8, 0)
+		end
+	else
+		GameTooltip:AddLine("Cliquez pour calculer la route optimale", 0.8, 0.8, 0.8)
+		GameTooltip:AddLine(" ")
+		GameTooltip:AddLine("Calcule le chemin le plus court", 0.6, 0.6, 0.6)
+		GameTooltip:AddLine("pour compléter toutes les quêtes", 0.6, 0.6, 0.6)
+		GameTooltip:AddLine("suivies sur cette carte.", 0.6, 0.6, 0.6)
+	end
+	GameTooltip:Show()
+end)
+
+routeButton:SetScript("OnLeave", function(self)
+	GameTooltip:Hide()
+end)
+
+WorldQuestTracker.RouteButton = routeButton
 
 --store the created widgets on a table
 local TrackerWidgetPool = {}
@@ -996,6 +1094,30 @@ function WorldQuestTracker.GetOrCreateTrackerWidget (index)
 	end
 
 	------------------------
+	
+	-- Route Order Badge (for optimal route planner) - positioned on the right side
+	f.RouteOrderBadge = CreateFrame("frame", nil, f, "BackdropTemplate")
+	f.RouteOrderBadge:SetSize(16, 16)
+	f.RouteOrderBadge:SetPoint("right", f.TomTomTrackerIcon, "left", -4, 0)
+	f.RouteOrderBadge:SetFrameLevel(f:GetFrameLevel() + 5)
+	
+	f.RouteOrderBadge.bg = f.RouteOrderBadge:CreateTexture(nil, "background")
+	f.RouteOrderBadge.bg:SetAllPoints()
+	f.RouteOrderBadge.bg:SetColorTexture(0.1, 0.5, 0.1, 0.9)
+	
+	f.RouteOrderBadge.border = f.RouteOrderBadge:CreateTexture(nil, "border")
+	f.RouteOrderBadge.border:SetPoint("topleft", -1, 1)
+	f.RouteOrderBadge.border:SetPoint("bottomright", 1, -1)
+	f.RouteOrderBadge.border:SetColorTexture(0.3, 0.9, 0.3, 1)
+	
+	f.RouteOrderBadge.text = f.RouteOrderBadge:CreateFontString(nil, "overlay", "GameFontNormalSmall")
+	f.RouteOrderBadge.text:SetPoint("center", f.RouteOrderBadge, "center", 0, 0)
+	f.RouteOrderBadge.text:SetTextColor(1, 1, 1, 1)
+	f.RouteOrderBadge.text:SetFont(GameFontNormal:GetFont(), 11, "OUTLINE")
+	
+	f.RouteOrderBadge:Hide()
+
+	------------------------
 
 	TrackerWidgetPool [index] = f
 	return f
@@ -1254,6 +1376,14 @@ function WorldQuestTracker.RefreshTrackerWidgets()
 					widget.TomTomTrackerIcon:Show()
 				else
 					widget.TomTomTrackerIcon:Hide()
+				end
+
+				-- Show route order badge if route mode is enabled
+				if (WorldQuestTracker.RouteEnabled and quest.routeOrder) then
+					widget.RouteOrderBadge.text:SetText(quest.routeOrder)
+					widget.RouteOrderBadge:Show()
+				else
+					widget.RouteOrderBadge:Hide()
 				end
 
 				widget:Show()
@@ -1710,6 +1840,258 @@ function WorldQuestTracker:FullTrackerUpdate()
 end
 
 
+----------------------------------------------------------------------------------------------------------------------------------------------------------------
+--> Route Planner / Optimal Path System ~route ~path ~planner
 
+-- Cache for optimal route
+WorldQuestTracker.OptimalRoute = {}
+WorldQuestTracker.RouteEnabled = false
+
+-- Calculate distance between two points using map coordinates
+local function CalculateQuestDistance(x1, y1, x2, y2, mapID)
+	if (not x1 or not y1 or not x2 or not y2) then
+		return 999999
+	end
+	
+	local HereBeDragons = LibStub("HereBeDragons-2.0")
+	local zoneXLength, zoneYLength = HereBeDragons:GetZoneSize(mapID or 0)
+	
+	if (zoneXLength == 0 or zoneYLength == 0) then
+		-- Fallback to simple distance if zone size not available
+		local dx = (x2 - x1)
+		local dy = (y2 - y1)
+		return ((dx * dx) + (dy * dy)) ^ 0.5
+	end
+	
+	local dx = (x2 - x1) * zoneXLength
+	local dy = (y2 - y1) * zoneYLength
+	return ((dx * dx) + (dy * dy)) ^ 0.5
+end
+
+-- Get quest coordinates
+local function GetQuestCoordinates(quest)
+	if (quest.questX and quest.questY) then
+		return quest.questX, quest.questY
+	end
+	
+	local x, y = C_TaskQuest.GetQuestLocation(quest.questID, quest.mapID)
+	return x or 0, y or 0
+end
+
+-- Get player coordinates on current map
+local function GetPlayerCoordinates()
+	local mapID = WorldQuestTracker.GetCurrentStandingMapAreaID()
+	local mapPosition = C_Map.GetPlayerMapPosition(mapID, "player")
+	if (mapPosition) then
+		return mapPosition.x, mapPosition.y, mapID
+	end
+	return 0.5, 0.5, mapID
+end
+
+-- Nearest Neighbor Algorithm for optimal route
+-- Returns ordered list of quests from current position
+function WorldQuestTracker.CalculateOptimalRoute()
+	local currentMapID = WorldQuestTracker.GetCurrentStandingMapAreaID()
+	local playerX, playerY, playerMapID = GetPlayerCoordinates()
+	
+	-- Get ALL tracked quests (not just current map)
+	local allQuests = {}
+	for i, quest in ipairs(WorldQuestTracker.QuestTrackList) do
+		if (not quest.isDisabled and HaveQuestData(quest.questID)) then
+			local x, y = GetQuestCoordinates(quest)
+			if (x and y and x > 0 and y > 0) then
+				table.insert(allQuests, {
+					quest = quest,
+					questID = quest.questID,
+					mapID = quest.mapID,
+					x = x,
+					y = y,
+					visited = false,
+					originalIndex = i,
+					isCurrentMap = (quest.mapID == currentMapID)
+				})
+			end
+		end
+	end
+	
+	if (#allQuests == 0) then
+		WorldQuestTracker.OptimalRoute = {}
+		return {}
+	end
+	
+	-- Sort quests: current map first, then group by mapID
+	table.sort(allQuests, function(a, b)
+		if (a.isCurrentMap ~= b.isCurrentMap) then
+			return a.isCurrentMap -- current map quests first
+		end
+		if (a.mapID ~= b.mapID) then
+			return a.mapID < b.mapID -- group by zone
+		end
+		return false
+	end)
+	
+	-- Nearest Neighbor algorithm within each zone group
+	local route = {}
+	local currentX, currentY = playerX, playerY
+	local currentRouteMapID = currentMapID
+	local remaining = #allQuests
+	
+	while remaining > 0 do
+		local nearestDist = 999999
+		local nearestIdx = nil
+		
+		-- First, try to find quest on same map
+		for i, questData in ipairs(allQuests) do
+			if (not questData.visited and questData.mapID == currentRouteMapID) then
+				local dist = CalculateQuestDistance(currentX, currentY, questData.x, questData.y, currentRouteMapID)
+				if (dist < nearestDist) then
+					nearestDist = dist
+					nearestIdx = i
+				end
+			end
+		end
+		
+		-- If no quest on same map, find next unvisited quest (will be on different map)
+		if (not nearestIdx) then
+			for i, questData in ipairs(allQuests) do
+				if (not questData.visited) then
+					nearestIdx = i
+					nearestDist = 0 -- Reset distance for new zone
+					currentRouteMapID = questData.mapID
+					currentX, currentY = 0.5, 0.5 -- Reset to center of new map
+					break
+				end
+			end
+		end
+		
+		if (nearestIdx) then
+			allQuests[nearestIdx].visited = true
+			allQuests[nearestIdx].routeOrder = #route + 1
+			allQuests[nearestIdx].distanceFromPrevious = nearestDist
+			table.insert(route, allQuests[nearestIdx])
+			currentX = allQuests[nearestIdx].x
+			currentY = allQuests[nearestIdx].y
+			remaining = remaining - 1
+		else
+			break
+		end
+	end
+	
+	-- Store route in quest objects
+	for i, routeData in ipairs(route) do
+		routeData.quest.routeOrder = i
+	end
+	
+	WorldQuestTracker.OptimalRoute = route
+	return route
+end
+
+-- Calculate total route distance
+function WorldQuestTracker.GetRouteTotalDistance()
+	local route = WorldQuestTracker.OptimalRoute
+	if (not route or #route == 0) then
+		return 0
+	end
+	
+	local totalDistance = 0
+	for i, questData in ipairs(route) do
+		totalDistance = totalDistance + (questData.distanceFromPrevious or 0)
+	end
+	
+	return totalDistance
+end
+
+-- Format distance for display
+local function FormatDistance(yards)
+	if (yards > 1000) then
+		return format("%.1fkm", yards / 1000)
+	else
+		return format("%dyds", floor(yards))
+	end
+end
+
+-- Toggle route mode
+function WorldQuestTracker.ToggleRouteMode()
+	WorldQuestTracker.RouteEnabled = not WorldQuestTracker.RouteEnabled
+	
+	if (WorldQuestTracker.RouteEnabled) then
+		WorldQuestTracker.CalculateOptimalRoute()
+		WorldQuestTracker:Msg("|cFF00FF00Route optimale activée!|r " .. #WorldQuestTracker.OptimalRoute .. " quêtes, " .. FormatDistance(WorldQuestTracker.GetRouteTotalDistance()) .. " total")
+	else
+		-- Clear route orders
+		for i, quest in ipairs(WorldQuestTracker.QuestTrackList) do
+			quest.routeOrder = nil
+		end
+		WorldQuestTracker.OptimalRoute = {}
+		WorldQuestTracker:Msg("|cFFFF6600Route optimale désactivée|r")
+	end
+	
+	WorldQuestTracker.RefreshTrackerWidgets()
+end
+
+-- Sort tracker by optimal route order
+local Sort_ByOptimalRoute = function(t1, t2)
+	local order1 = t1.routeOrder or 999
+	local order2 = t2.routeOrder or 999
+	return order1 < order2
+end
+
+function WorldQuestTracker.SortTrackerByOptimalRoute()
+	if (WorldQuestTracker.RouteEnabled and #WorldQuestTracker.OptimalRoute > 0) then
+		table.sort(WorldQuestTracker.QuestTrackList, Sort_ByOptimalRoute)
+	end
+	WorldQuestTracker.RefreshTrackerWidgets()
+end
+
+-- Recalculate route when player moves significantly or quest is completed
+local lastRouteUpdatePosition = {x = 0, y = 0}
+local ROUTE_UPDATE_DISTANCE_THRESHOLD = 0.05 -- 5% of map = significant movement
+
+function WorldQuestTracker.CheckRouteUpdate()
+	if (not WorldQuestTracker.RouteEnabled) then
+		return
+	end
+	
+	local playerX, playerY = GetPlayerCoordinates()
+	local dx = playerX - lastRouteUpdatePosition.x
+	local dy = playerY - lastRouteUpdatePosition.y
+	local distMoved = ((dx * dx) + (dy * dy)) ^ 0.5
+	
+	if (distMoved > ROUTE_UPDATE_DISTANCE_THRESHOLD) then
+		lastRouteUpdatePosition.x = playerX
+		lastRouteUpdatePosition.y = playerY
+		WorldQuestTracker.CalculateOptimalRoute()
+		WorldQuestTracker.SortTrackerByOptimalRoute()
+	end
+end
+
+-- Hook into zone change to recalculate route
+local routeEventFrame = CreateFrame("frame")
+routeEventFrame:RegisterEvent("ZONE_CHANGED_NEW_AREA")
+routeEventFrame:RegisterEvent("QUEST_TURNED_IN")
+routeEventFrame:RegisterEvent("QUEST_REMOVED")
+routeEventFrame:SetScript("OnEvent", function(self, event, ...)
+	if (WorldQuestTracker.RouteEnabled) then
+		C_Timer.After(0.5, function()
+			WorldQuestTracker.CalculateOptimalRoute()
+			WorldQuestTracker.SortTrackerByOptimalRoute()
+			-- Update button if no more quests
+			if (#WorldQuestTracker.OptimalRoute == 0) then
+				WorldQuestTracker.RouteEnabled = false
+				if (WorldQuestTracker.RouteButton) then
+					WorldQuestTracker.RouteButton.activeGlow:Hide()
+					WorldQuestTracker.RouteButton.icon:SetAtlas("flightpath-taxinode-neutral", false)
+				end
+			end
+		end)
+	end
+end)
+
+-- Periodic route check (every 10 seconds when route is enabled)
+C_Timer.NewTicker(10, function()
+	if (WorldQuestTracker.RouteEnabled) then
+		WorldQuestTracker.CheckRouteUpdate()
+	end
+end)
 
 
