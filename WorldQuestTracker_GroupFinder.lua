@@ -1096,7 +1096,13 @@ end
 function WorldQuestTracker.TrackEliteQuest (questID)
 	local tracker = ObjectiveTrackerFrame
 
-	if (not tracker.initialized) then
+	--check if the objective tracker is ready (initialized property may not exist in newer WoW versions)
+	if (tracker.initialized == false) then
+		return false
+	end
+
+	--check if MODULES exists (may not exist in all WoW versions)
+	if (not tracker.MODULES) then
 		return false
 	end
 

@@ -1466,7 +1466,7 @@ end
 function WorldQuestTracker.UpdateQuestsInArea()
 	for index, quest in ipairs (WorldQuestTracker.QuestTrackList) do
 		if (HaveQuestData (quest.questID)) then
-			--local questIndex = C_QuestLog.GetQuestLogIndexByID (quest.questID)
+			local isInArea, isOnMap = GetTaskInfo(quest.questID)
 			if (isInArea) then --(questIndex and questIndex ~= 0) or
 				--desativa pois o jogo ja deve estar mostrando a quest
 				if (not quest.isDisabled and not quest.enteringZone) then
@@ -1500,7 +1500,13 @@ end
 function WorldQuestTracker.IsQuestOnObjectiveTracker (quest)
 	local tracker = ObjectiveTrackerFrame
 
-	if (not tracker.initialized) then
+	--check if the objective tracker is ready (initialized property may not exist in newer WoW versions)
+	if (tracker.initialized == false) then
+		return
+	end
+
+	--check if MODULES exists (may not exist in all WoW versions)
+	if (not tracker.MODULES) then
 		return
 	end
 
@@ -1642,7 +1648,8 @@ local bHooked = false
 --dispara quando o tracker da interface � atualizado, precisa dar refresh na nossa ancora
 local On_ObjectiveTracker_Update = function()
 	local blizzObjectiveTracker = ObjectiveTrackerFrame
-	if (not blizzObjectiveTracker.init) then
+	--check if the objective tracker is ready (initialized property may not exist in newer WoW versions)
+	if (blizzObjectiveTracker.initialized == false) then
 		return
 	end
 
