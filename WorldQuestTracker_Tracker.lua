@@ -420,32 +420,68 @@ end)
 
 routeButton:SetScript("OnEnter", function(self)
 	GameTooltip:SetOwner(self, "ANCHOR_LEFT")
-	GameTooltip:AddLine("Route Optimale", 1, 1, 1)
+	GameTooltip:AddLine("Route Optimale", 1, 0.82, 0)
 	if (WorldQuestTracker.RouteEnabled) then
 		GameTooltip:AddLine("Cliquez pour désactiver", 0.8, 0.8, 0.8)
 		local route = WorldQuestTracker.OptimalRoute
+		local stats = WorldQuestTracker.RouteStats
 		if (route and #route > 0) then
 			GameTooltip:AddLine(" ")
-			GameTooltip:AddLine("Parcours optimal:", 0, 1, 0)
-			for i, questData in ipairs(route) do
+			-- Summary stats
+			local totalDist = stats.totalDistance or 0
+			local totalStr = totalDist > 1000 and string.format("%.1fkm", totalDist / 1000) or string.format("%dyds", math.floor(totalDist))
+			local estTime = stats.estimatedTime or 0
+			local timeStr
+			if (estTime > 60) then
+				timeStr = string.format("%dm%02ds", math.floor(estTime / 60), math.floor(estTime % 60))
+			else
+				timeStr = string.format("%ds", math.floor(estTime))
+			end
+			
+			GameTooltip:AddDoubleLine("Quêtes:", #route, 0.5, 0.8, 1, 1, 1, 1)
+			GameTooltip:AddDoubleLine("Distance:", totalStr, 0.5, 0.8, 1, 1, 1, 1)
+			GameTooltip:AddDoubleLine("Temps estimé:", "~" .. timeStr, 0.5, 0.8, 1, 1, 1, 1)
+			
+			GameTooltip:AddLine(" ")
+			GameTooltip:AddLine("Parcours:", 0, 1, 0)
+			
+			local maxDisplay = math.min(#route, 8) -- Limit display
+			for i = 1, maxDisplay do
+				local questData = route[i]
 				local title = C_TaskQuest.GetQuestInfoByQuestID(questData.questID) or "Unknown"
 				local distStr = string.format("%dyds", math.floor(questData.distanceFromPrevious or 0))
 				if ((questData.distanceFromPrevious or 0) > 1000) then
 					distStr = string.format("%.1fkm", (questData.distanceFromPrevious or 0) / 1000)
 				end
-				GameTooltip:AddDoubleLine(string.format("%d. %s", i, title:sub(1, 25)), distStr, 1, 1, 1, 0.7, 0.7, 0.7)
+				
+				local orderColor = (i == 1) and {1, 0.8, 0} or {1, 1, 1}
+				local displayTitle = title:sub(1, 22)
+				if (#title > 22) then displayTitle = displayTitle .. "..." end
+				GameTooltip:AddDoubleLine(string.format("%d. %s", i, displayTitle), distStr, orderColor[1], orderColor[2], orderColor[3], 0.7, 0.7, 0.7)
 			end
+			
+			if (#route > maxDisplay) then
+				GameTooltip:AddLine(string.format("  ... et %d autres", #route - maxDisplay), 0.5, 0.5, 0.5)
+			end
+			
 			GameTooltip:AddLine(" ")
-			local totalDist = WorldQuestTracker.GetRouteTotalDistance and WorldQuestTracker.GetRouteTotalDistance() or 0
-			local totalStr = totalDist > 1000 and string.format("%.1fkm", totalDist / 1000) or string.format("%dyds", math.floor(totalDist))
-			GameTooltip:AddDoubleLine("Distance totale:", totalStr, 1, 0.8, 0, 1, 0.8, 0)
+			GameTooltip:AddLine("Algorithme: Nearest Neighbor + 2-opt", 0.4, 0.4, 0.4)
 		end
 	else
 		GameTooltip:AddLine("Cliquez pour calculer la route optimale", 0.8, 0.8, 0.8)
 		GameTooltip:AddLine(" ")
-		GameTooltip:AddLine("Calcule le chemin le plus court", 0.6, 0.6, 0.6)
-		GameTooltip:AddLine("pour compléter toutes les quêtes", 0.6, 0.6, 0.6)
-		GameTooltip:AddLine("suivies sur cette carte.", 0.6, 0.6, 0.6)
+		GameTooltip:AddLine("Fonctionnalités:", 0.6, 0.8, 1)
+		GameTooltip:AddLine("• Calcule le chemin le plus court", 0.6, 0.6, 0.6)
+		GameTooltip:AddLine("• Algorithme Nearest Neighbor + 2-opt", 0.6, 0.6, 0.6)
+		GameTooltip:AddLine("• Priorise les quêtes qui expirent", 0.6, 0.6, 0.6)
+		GameTooltip:AddLine("• Estimation du temps de trajet", 0.6, 0.6, 0.6)
+		GameTooltip:AddLine(" ")
+		local numTracked = #WorldQuestTracker.QuestTrackList
+		if (numTracked > 0) then
+			GameTooltip:AddLine(numTracked .. " quête(s) suivie(s)", 0, 1, 0)
+		else
+			GameTooltip:AddLine("Aucune quête suivie", 1, 0.5, 0)
+		end
 	end
 	GameTooltip:Show()
 end)
@@ -1096,14 +1132,43 @@ function WorldQuestTracker.GetOrCreateTrackerWidget (index)
 	
 	-- Route Order Badge (for optimal route planner) - positioned on the reward icon
 	f.RouteOrderBadge = CreateFrame("frame", nil, f, "BackdropTemplate")
-	f.RouteOrderBadge:SetSize(14, 14)
-	f.RouteOrderBadge:SetPoint("bottomright", f.Circle, "bottomright", 2, 0)
+	f.RouteOrderBadge:SetSize(18, 18)
+	f.RouteOrderBadge:SetPoint("bottomright", f.Circle, "bottomright", 4, -2)
 	f.RouteOrderBadge:SetFrameLevel(f:GetFrameLevel() + 10)
+	
+	-- Badge background with gradient effect
+	f.RouteOrderBadge.bg = f.RouteOrderBadge:CreateTexture(nil, "background")
+	f.RouteOrderBadge.bg:SetAllPoints()
+	f.RouteOrderBadge.bg:SetColorTexture(0, 0, 0, 0.8)
+	
+	-- Border glow
+	f.RouteOrderBadge.glow = f.RouteOrderBadge:CreateTexture(nil, "border")
+	f.RouteOrderBadge.glow:SetPoint("center")
+	f.RouteOrderBadge.glow:SetSize(22, 22)
+	f.RouteOrderBadge.glow:SetColorTexture(0.2, 0.8, 0.3, 0.6)
 	
 	f.RouteOrderBadge.text = f.RouteOrderBadge:CreateFontString(nil, "overlay", "GameFontNormalSmall")
 	f.RouteOrderBadge.text:SetPoint("center", f.RouteOrderBadge, "center", 0, 0)
 	f.RouteOrderBadge.text:SetTextColor(1, 1, 1, 1)
-	f.RouteOrderBadge.text:SetFont(GameFontNormal:GetFont(), 12, "THICKOUTLINE")
+	f.RouteOrderBadge.text:SetFont(GameFontNormal:GetFont(), 11, "OUTLINE")
+	
+	-- Function to update badge color based on order
+	f.RouteOrderBadge.SetOrder = function(self, order)
+		self.text:SetText(order)
+		if (order == 1) then
+			-- First quest: gold/yellow
+			self.glow:SetColorTexture(1, 0.8, 0, 0.8)
+			self.text:SetTextColor(1, 0.9, 0.2, 1)
+		elseif (order <= 3) then
+			-- Top 3: green
+			self.glow:SetColorTexture(0.2, 0.8, 0.3, 0.6)
+			self.text:SetTextColor(0.6, 1, 0.6, 1)
+		else
+			-- Rest: subtle blue
+			self.glow:SetColorTexture(0.3, 0.5, 0.8, 0.4)
+			self.text:SetTextColor(0.8, 0.9, 1, 1)
+		end
+	end
 	
 	f.RouteOrderBadge:Hide()
 
@@ -1370,7 +1435,7 @@ function WorldQuestTracker.RefreshTrackerWidgets()
 
 				-- Show route order badge if route mode is enabled
 				if (WorldQuestTracker.RouteEnabled and quest.routeOrder) then
-					widget.RouteOrderBadge.text:SetText(quest.routeOrder)
+					widget.RouteOrderBadge:SetOrder(quest.routeOrder)
 					widget.RouteOrderBadge:Show()
 				else
 					widget.RouteOrderBadge:Hide()
@@ -1836,6 +1901,25 @@ end
 -- Cache for optimal route
 WorldQuestTracker.OptimalRoute = {}
 WorldQuestTracker.RouteEnabled = false
+WorldQuestTracker.RouteLines = {} -- Lines drawn on map
+WorldQuestTracker.RouteSettings = {
+	MOUNT_SPEED_YDS_PER_SEC = 16, -- ~100% mount speed in yards/sec
+	FLYING_SPEED_YDS_PER_SEC = 28, -- ~310% flying speed in yards/sec
+	ROUTE_LINE_THICKNESS = 2,
+	ROUTE_LINE_COLOR = {0.2, 0.8, 0.4, 0.8}, -- Green
+	ROUTE_LINE_NEXT_COLOR = {1, 0.8, 0, 1}, -- Gold for next quest
+	ROUTE_UPDATE_INTERVAL = 10,
+	USE_2OPT_IMPROVEMENT = true,
+	MAX_2OPT_ITERATIONS = 50,
+}
+
+-- Route statistics
+WorldQuestTracker.RouteStats = {
+	totalDistance = 0,
+	estimatedTime = 0,
+	completedCount = 0,
+	remainingCount = 0,
+}
 
 -- Calculate distance between two points using map coordinates
 local function CalculateQuestDistance(x1, y1, x2, y2, mapID)
@@ -1878,6 +1962,79 @@ local function GetPlayerCoordinates()
 	return 0.5, 0.5, mapID
 end
 
+-- 2-opt improvement: swap two edges if it reduces total distance
+local function TwoOptImprove(route, mapID)
+	if (not WorldQuestTracker.RouteSettings.USE_2OPT_IMPROVEMENT) then
+		return route
+	end
+	
+	if (#route < 4) then
+		return route
+	end
+	
+	local improved = true
+	local iterations = 0
+	local maxIterations = WorldQuestTracker.RouteSettings.MAX_2OPT_ITERATIONS
+	
+	while improved and iterations < maxIterations do
+		improved = false
+		iterations = iterations + 1
+		
+		for i = 1, #route - 2 do
+			for j = i + 2, #route do
+				if (route[i].mapID == route[j].mapID) then -- Only optimize within same zone
+					local a, b = route[i], route[i + 1]
+					local c, d = route[j], route[j + 1] or route[1]
+					
+					local currentDist = CalculateQuestDistance(a.x, a.y, b.x, b.y, a.mapID) +
+					                    CalculateQuestDistance(c.x, c.y, d.x, d.y, c.mapID)
+					local newDist = CalculateQuestDistance(a.x, a.y, c.x, c.y, a.mapID) +
+					                CalculateQuestDistance(b.x, b.y, d.x, d.y, b.mapID)
+					
+					if (newDist < currentDist * 0.95) then -- 5% improvement threshold
+						-- Reverse segment between i+1 and j
+						local left, right = i + 1, j
+						while left < right do
+							route[left], route[right] = route[right], route[left]
+							left = left + 1
+							right = right - 1
+						end
+						improved = true
+					end
+				end
+			end
+		end
+	end
+	
+	return route
+end
+
+-- Calculate total route distance
+local function CalculateTotalRouteDistance(route)
+	local total = 0
+	for i, questData in ipairs(route) do
+		total = total + (questData.distanceFromPrevious or 0)
+	end
+	return total
+end
+
+-- Recalculate distances after 2-opt
+local function RecalculateRouteDistances(route, startX, startY, startMapID)
+	local currentX, currentY = startX, startY
+	local currentMap = startMapID
+	
+	for i, questData in ipairs(route) do
+		if (questData.mapID == currentMap) then
+			questData.distanceFromPrevious = CalculateQuestDistance(currentX, currentY, questData.x, questData.y, currentMap)
+		else
+			questData.distanceFromPrevious = 0 -- Zone change, distance reset
+			currentMap = questData.mapID
+		end
+		currentX = questData.x
+		currentY = questData.y
+	end
+end
+
 -- Nearest Neighbor Algorithm for optimal route
 -- Returns ordered list of quests from current position
 function WorldQuestTracker.CalculateOptimalRoute()
@@ -1886,11 +2043,13 @@ function WorldQuestTracker.CalculateOptimalRoute()
 	
 	-- Get ALL tracked quests (not just current map)
 	local allQuests = {}
+	local questsByZone = {} -- Group quests by zone for better optimization
+	
 	for i, quest in ipairs(WorldQuestTracker.QuestTrackList) do
 		if (not quest.isDisabled and HaveQuestData(quest.questID)) then
 			local x, y = GetQuestCoordinates(quest)
 			if (x and y and x > 0 and y > 0) then
-				table.insert(allQuests, {
+				local questData = {
 					quest = quest,
 					questID = quest.questID,
 					mapID = quest.mapID,
@@ -1898,24 +2057,40 @@ function WorldQuestTracker.CalculateOptimalRoute()
 					y = y,
 					visited = false,
 					originalIndex = i,
-					isCurrentMap = (quest.mapID == currentMapID)
-				})
+					isCurrentMap = (quest.mapID == currentMapID),
+					rewardType = quest.rewardType, -- For priority sorting
+					timeLeft = WorldQuestTracker.GetQuest_TimeLeft(quest.questID) or 999999,
+				}
+				table.insert(allQuests, questData)
+				
+				-- Group by zone
+				if (not questsByZone[quest.mapID]) then
+					questsByZone[quest.mapID] = {}
+				end
+				table.insert(questsByZone[quest.mapID], questData)
 			end
 		end
 	end
 	
 	if (#allQuests == 0) then
 		WorldQuestTracker.OptimalRoute = {}
+		WorldQuestTracker.RouteStats = {totalDistance = 0, estimatedTime = 0, completedCount = 0, remainingCount = 0}
 		return {}
 	end
 	
-	-- Sort quests: current map first, then group by mapID
+	-- Sort quests: current map first, then group by mapID, prioritize expiring quests
 	table.sort(allQuests, function(a, b)
 		if (a.isCurrentMap ~= b.isCurrentMap) then
 			return a.isCurrentMap -- current map quests first
 		end
 		if (a.mapID ~= b.mapID) then
 			return a.mapID < b.mapID -- group by zone
+		end
+		-- Within same zone, prioritize expiring quests
+		if (a.timeLeft < 60 and b.timeLeft >= 60) then
+			return true
+		elseif (b.timeLeft < 60 and a.timeLeft >= 60) then
+			return false
 		end
 		return false
 	end)
@@ -1934,6 +2109,10 @@ function WorldQuestTracker.CalculateOptimalRoute()
 		for i, questData in ipairs(allQuests) do
 			if (not questData.visited and questData.mapID == currentRouteMapID) then
 				local dist = CalculateQuestDistance(currentX, currentY, questData.x, questData.y, currentRouteMapID)
+				-- Bonus for expiring quests (reduce effective distance)
+				if (questData.timeLeft and questData.timeLeft < 60) then
+					dist = dist * 0.5 -- Make expiring quests appear closer
+				end
 				if (dist < nearestDist) then
 					nearestDist = dist
 					nearestIdx = i
@@ -1957,7 +2136,9 @@ function WorldQuestTracker.CalculateOptimalRoute()
 		if (nearestIdx) then
 			allQuests[nearestIdx].visited = true
 			allQuests[nearestIdx].routeOrder = #route + 1
-			allQuests[nearestIdx].distanceFromPrevious = nearestDist
+			-- Recalculate actual distance (without expiring bonus)
+			local actualDist = CalculateQuestDistance(currentX, currentY, allQuests[nearestIdx].x, allQuests[nearestIdx].y, currentRouteMapID)
+			allQuests[nearestIdx].distanceFromPrevious = (allQuests[nearestIdx].mapID == currentRouteMapID) and actualDist or 0
 			table.insert(route, allQuests[nearestIdx])
 			currentX = allQuests[nearestIdx].x
 			currentY = allQuests[nearestIdx].y
@@ -1967,28 +2148,44 @@ function WorldQuestTracker.CalculateOptimalRoute()
 		end
 	end
 	
-	-- Store route in quest objects
+	-- Apply 2-opt optimization per zone
+	if (#route >= 4) then
+		route = TwoOptImprove(route, currentMapID)
+		RecalculateRouteDistances(route, playerX, playerY, currentMapID)
+	end
+	
+	-- Recalculate route order after 2-opt
 	for i, routeData in ipairs(route) do
+		routeData.routeOrder = i
 		routeData.quest.routeOrder = i
 	end
 	
+	-- Update stats
+	local totalDist = CalculateTotalRouteDistance(route)
+	local speed = IsFlying() and WorldQuestTracker.RouteSettings.FLYING_SPEED_YDS_PER_SEC or WorldQuestTracker.RouteSettings.MOUNT_SPEED_YDS_PER_SEC
+	WorldQuestTracker.RouteStats = {
+		totalDistance = totalDist,
+		estimatedTime = totalDist / speed, -- in seconds
+		completedCount = 0,
+		remainingCount = #route,
+	}
+	
 	WorldQuestTracker.OptimalRoute = route
+	
+	-- Draw route lines on map
+	WorldQuestTracker.DrawRouteOnMap()
+	
 	return route
 end
 
 -- Calculate total route distance
 function WorldQuestTracker.GetRouteTotalDistance()
-	local route = WorldQuestTracker.OptimalRoute
-	if (not route or #route == 0) then
-		return 0
-	end
-	
-	local totalDistance = 0
-	for i, questData in ipairs(route) do
-		totalDistance = totalDistance + (questData.distanceFromPrevious or 0)
-	end
-	
-	return totalDistance
+	return WorldQuestTracker.RouteStats.totalDistance or 0
+end
+
+-- Get estimated time to complete route
+function WorldQuestTracker.GetRouteEstimatedTime()
+	return WorldQuestTracker.RouteStats.estimatedTime or 0
 end
 
 -- Format distance for display
@@ -2000,19 +2197,121 @@ local function FormatDistance(yards)
 	end
 end
 
+-- Format time for display
+local function FormatTime(seconds)
+	if (seconds > 3600) then
+		return format("%dh%02dm", floor(seconds / 3600), floor((seconds % 3600) / 60))
+	elseif (seconds > 60) then
+		return format("%dm%02ds", floor(seconds / 60), floor(seconds % 60))
+	else
+		return format("%ds", floor(seconds))
+	end
+end
+
+-- Draw route lines on the zone map
+function WorldQuestTracker.DrawRouteOnMap()
+	-- Clear existing lines
+	WorldQuestTracker.ClearRouteLines()
+	
+	if (not WorldQuestTracker.RouteEnabled) then
+		return
+	end
+	
+	local route = WorldQuestTracker.OptimalRoute
+	if (not route or #route < 2) then
+		return
+	end
+	
+	local currentMapID = WorldQuestTracker.GetCurrentStandingMapAreaID()
+	local map = WorldQuestTrackerDataProvider and WorldQuestTrackerDataProvider:GetMap()
+	if (not map) then
+		return
+	end
+	
+	-- Get player position as start
+	local playerX, playerY = GetPlayerCoordinates()
+	local prevX, prevY = playerX, playerY
+	local prevOnCurrentMap = true
+	
+	for i, questData in ipairs(route) do
+		if (questData.mapID == currentMapID) then
+			if (prevOnCurrentMap) then
+				-- Draw line from previous point
+				local line = WorldQuestTracker.GetOrCreateRouteLine(i)
+				if (line) then
+					local color = (i == 1) and WorldQuestTracker.RouteSettings.ROUTE_LINE_NEXT_COLOR or WorldQuestTracker.RouteSettings.ROUTE_LINE_COLOR
+					line:SetColorTexture(unpack(color))
+					line:SetThickness(WorldQuestTracker.RouteSettings.ROUTE_LINE_THICKNESS)
+					
+					-- Convert normalized coords to map coords
+					local mapWidth = map:GetWidth()
+					local mapHeight = map:GetHeight()
+					
+					local startX = prevX * mapWidth
+					local startY = prevY * mapHeight
+					local endX = questData.x * mapWidth
+					local endY = questData.y * mapHeight
+					
+					line:SetStartPoint("TOPLEFT", map, startX, -startY)
+					line:SetEndPoint("TOPLEFT", map, endX, -endY)
+					line:Show()
+				end
+			end
+			prevX = questData.x
+			prevY = questData.y
+			prevOnCurrentMap = true
+		else
+			prevOnCurrentMap = false
+		end
+	end
+end
+
+-- Line pool for route visualization
+local routeLinePool = {}
+
+function WorldQuestTracker.GetOrCreateRouteLine(index)
+	if (routeLinePool[index]) then
+		return routeLinePool[index]
+	end
+	
+	local map = WorldQuestTrackerDataProvider and WorldQuestTrackerDataProvider:GetMap()
+	if (not map) then
+		return nil
+	end
+	
+	local line = map:CreateLine(nil, "OVERLAY")
+	if (line) then
+		line:SetThickness(2)
+		routeLinePool[index] = line
+	end
+	return line
+end
+
+function WorldQuestTracker.ClearRouteLines()
+	for i, line in pairs(routeLinePool) do
+		if (line and line.Hide) then
+			line:Hide()
+		end
+	end
+end
+
 -- Toggle route mode
 function WorldQuestTracker.ToggleRouteMode()
 	WorldQuestTracker.RouteEnabled = not WorldQuestTracker.RouteEnabled
 	
 	if (WorldQuestTracker.RouteEnabled) then
 		WorldQuestTracker.CalculateOptimalRoute()
-		WorldQuestTracker:Msg("|cFF00FF00Route optimale activée!|r " .. #WorldQuestTracker.OptimalRoute .. " quêtes, " .. FormatDistance(WorldQuestTracker.GetRouteTotalDistance()) .. " total")
+		local stats = WorldQuestTracker.RouteStats
+		local distStr = FormatDistance(stats.totalDistance)
+		local timeStr = FormatTime(stats.estimatedTime)
+		WorldQuestTracker:Msg("|cFF00FF00Route optimale activée!|r " .. #WorldQuestTracker.OptimalRoute .. " quêtes | " .. distStr .. " | ~" .. timeStr)
 	else
 		-- Clear route orders
 		for i, quest in ipairs(WorldQuestTracker.QuestTrackList) do
 			quest.routeOrder = nil
 		end
 		WorldQuestTracker.OptimalRoute = {}
+		WorldQuestTracker.ClearRouteLines()
 		WorldQuestTracker:Msg("|cFFFF6600Route optimale désactivée|r")
 	end
 	
