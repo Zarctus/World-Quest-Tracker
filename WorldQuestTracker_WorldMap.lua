@@ -208,26 +208,6 @@ function WorldQuestTracker.PlayTick(tickType)
 	end
 end
 
-local onenter_scale_animation = function(self, scale)
-	if (not WorldQuestTracker.db.profile.hoverover_animations) then
-		return
-	end
-
-	if (self.OnLeaveAnimation:IsPlaying()) then
-		self.OnLeaveAnimation:Stop()
-	end
-
-	self.OriginalScale = self:GetScale()
-	self.ModifiedScale = self.OriginalScale + scale
-
-	if (self.OnEnterAnimation.ScaleAnimation.SetScaleFrom) then
-			safeSetScale(self.OnEnterAnimation.ScaleAnimation, self.OriginalScale, self.ModifiedScale)
-	else
-			safeSetScale(self.OnEnterAnimation.ScaleAnimation, self.OriginalScale, self.ModifiedScale)
-	end
-	self.OnEnterAnimation:Play()
-end
-
 -- try multiple calling conventions for different DF / WoW runtime APIs
 local function safeSetScale(anim, fromScale, toScale)
 	if (not anim) then
@@ -253,6 +233,22 @@ local function safeSetScale(anim, fromScale, toScale)
 		try(anim.SetToScale, toScale)
 		return
 	end
+end
+
+local onenter_scale_animation = function(self, scale)
+	if (not WorldQuestTracker.db.profile.hoverover_animations) then
+		return
+	end
+
+	if (self.OnLeaveAnimation:IsPlaying()) then
+		self.OnLeaveAnimation:Stop()
+	end
+
+	self.OriginalScale = self:GetScale()
+	self.ModifiedScale = self.OriginalScale + scale
+
+	safeSetScale(self.OnEnterAnimation.ScaleAnimation, self.OriginalScale, self.ModifiedScale)
+	self.OnEnterAnimation:Play()
 end
 
 local onleave_scale_animation = function(self, scale)
