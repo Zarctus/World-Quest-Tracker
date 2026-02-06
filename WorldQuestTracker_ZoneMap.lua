@@ -71,6 +71,30 @@ end
 
 local emptyFunction = function()end
 
+-- try multiple calling conventions for different DF / WoW runtime APIs
+local function safeSetScale(anim, fromScale, toScale)
+	if (not anim) then
+		return
+	end
+	local try = function(fn, ...)
+		if (not fn) then return false end
+		local ok = pcall(fn, anim, ...)
+		if (ok) then return true end
+		ok = pcall(fn, ...)
+		return ok
+	end
+
+	if (try(anim.SetScaleFrom, fromScale)) then
+		try(anim.SetScaleTo, toScale)
+		return
+	end
+
+	if (try(anim.SetFromScale, fromScale)) then
+		try(anim.SetToScale, toScale)
+		return
+	end
+end
+
 function WorldQuestTracker.CreateZoneWidget(index, name, parent, pinTemplate) --~zone --~zoneicon ~create
 	local anchorFrame
 
@@ -211,24 +235,14 @@ function WorldQuestTracker.CreateZoneWidget(index, name, parent, pinTemplate) --
 
 				if (WorldQuestTrackerAddon.GetCurrentZoneType() == "zone") then
 					self.ModifiedScale = self.OriginalScale + animaSettings.scaleZone
-					if (self.OnEnterAnimation.ScaleAnimation.SetScaleFrom) then
-						self.OnEnterAnimation.ScaleAnimation:SetScaleFrom(self.OriginalScale, self.OriginalScale)
-						self.OnEnterAnimation.ScaleAnimation:SetScaleTo(self.ModifiedScale, self.ModifiedScale)
-					else
-						self.OnEnterAnimation.ScaleAnimation:SetFromScale(self.OriginalScale, self.OriginalScale)
-						self.OnEnterAnimation.ScaleAnimation:SetToScale(self.ModifiedScale, self.ModifiedScale)
-					end
+					-- use safe caller to handle different runtime APIs
+					safeSetScale(self.OnEnterAnimation.ScaleAnimation, self.OriginalScale, self.ModifiedScale)
 					self.OnEnterAnimation:Play()
 
 				elseif (WorldQuestTrackerAddon.GetCurrentZoneType() == "world") then
 					self.ModifiedScale = 1 + animaSettings.scaleWorld
-					if (self.OnEnterAnimation.ScaleAnimation.SetScaleFrom) then
-						self.OnEnterAnimation.ScaleAnimation:SetScaleFrom(1, 1)
-						self.OnEnterAnimation.ScaleAnimation:SetScaleTo(self.ModifiedScale, self.ModifiedScale)
-					else
-						self.OnEnterAnimation.ScaleAnimation:SetFromScale(1, 1)
-						self.OnEnterAnimation.ScaleAnimation:SetToScale(self.ModifiedScale, self.ModifiedScale)
-					end
+					-- use safe caller to handle different runtime APIs
+					safeSetScale(self.OnEnterAnimation.ScaleAnimation, 1, self.ModifiedScale)
 					self.OnEnterAnimation:Play()
 				end
 			end
@@ -253,22 +267,9 @@ function WorldQuestTracker.CreateZoneWidget(index, name, parent, pinTemplate) --
 
 				if (currentScale and originalScale) then
 					if (WorldQuestTrackerAddon.GetCurrentZoneType() == "zone") then
-						if (self.OnLeaveAnimation.ScaleAnimation.SetScaleFrom) then
-							self.OnLeaveAnimation.ScaleAnimation:SetScaleFrom(currentScale, currentScale)
-							self.OnLeaveAnimation.ScaleAnimation:SetScaleTo(originalScale, originalScale)
-						else
-							self.OnLeaveAnimation.ScaleAnimation:SetFromScale(currentScale, currentScale)
-							self.OnLeaveAnimation.ScaleAnimation:SetToScale(originalScale, originalScale)
-						end
-
+						safeSetScale(self.OnLeaveAnimation.ScaleAnimation, currentScale, originalScale)
 					elseif (WorldQuestTrackerAddon.GetCurrentZoneType() == "world") then
-						if (self.OnLeaveAnimation.ScaleAnimation.SetScaleFrom) then
-							self.OnLeaveAnimation.ScaleAnimation:SetScaleFrom(currentScale, currentScale)
-							self.OnLeaveAnimation.ScaleAnimation:SetScaleTo(1, 1)
-						else
-							self.OnLeaveAnimation.ScaleAnimation:SetFromScale(currentScale, currentScale)
-							self.OnLeaveAnimation.ScaleAnimation:SetToScale(1, 1)
-						end
+						safeSetScale(self.OnLeaveAnimation.ScaleAnimation, currentScale, 1)
 					end
 				end
 

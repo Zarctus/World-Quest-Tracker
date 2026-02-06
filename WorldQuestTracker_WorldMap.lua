@@ -221,13 +221,38 @@ local onenter_scale_animation = function(self, scale)
 	self.ModifiedScale = self.OriginalScale + scale
 
 	if (self.OnEnterAnimation.ScaleAnimation.SetScaleFrom) then
-		self.OnEnterAnimation.ScaleAnimation:SetScaleFrom(self.OriginalScale, self.OriginalScale)
-		self.OnEnterAnimation.ScaleAnimation:SetScaleTo(self.ModifiedScale, self.ModifiedScale)
+			safeSetScale(self.OnEnterAnimation.ScaleAnimation, self.OriginalScale, self.ModifiedScale)
 	else
-		self.OnEnterAnimation.ScaleAnimation:SetFromScale(self.OriginalScale, self.OriginalScale)
-		self.OnEnterAnimation.ScaleAnimation:SetToScale(self.ModifiedScale, self.ModifiedScale)
+			safeSetScale(self.OnEnterAnimation.ScaleAnimation, self.OriginalScale, self.ModifiedScale)
 	end
 	self.OnEnterAnimation:Play()
+end
+
+-- try multiple calling conventions for different DF / WoW runtime APIs
+local function safeSetScale(anim, fromScale, toScale)
+	if (not anim) then
+		return
+	end
+	local try = function(fn, ...)
+		if (not fn) then return false end
+		local ok = pcall(fn, anim, ...)
+		if (ok) then return true end
+		-- try calling without passing anim as self
+		ok = pcall(fn, ...)
+		return ok
+	end
+
+	-- prefer SetScaleFrom/SetScaleTo
+	if (try(anim.SetScaleFrom, fromScale)) then
+		try(anim.SetScaleTo, toScale)
+		return
+	end
+
+	-- fallback to SetFromScale/SetToScale
+	if (try(anim.SetFromScale, fromScale)) then
+		try(anim.SetToScale, toScale)
+		return
+	end
 end
 
 local onleave_scale_animation = function(self, scale)
@@ -246,11 +271,9 @@ local onleave_scale_animation = function(self, scale)
 		if (not currentScale) then
 			currentScale = 1
 		end
-		self.OnLeaveAnimation.ScaleAnimation:SetScaleFrom(currentScale, currentScale) --error bad argument #1 to 'SetScaleFrom' (Usage: self:SetScaleFrom(scale))
-		self.OnLeaveAnimation.ScaleAnimation:SetScaleTo(originalScale, originalScale)
+		safeSetScale(self.OnLeaveAnimation.ScaleAnimation, currentScale, originalScale)
 	else
-		self.OnLeaveAnimation.ScaleAnimation:SetFromScale(currentScale, currentScale)
-		self.OnLeaveAnimation.ScaleAnimation:SetToScale(originalScale, originalScale)
+		safeSetScale(self.OnLeaveAnimation.ScaleAnimation, currentScale, originalScale)
 	end
 
 	self.OnLeaveAnimation:Play()
