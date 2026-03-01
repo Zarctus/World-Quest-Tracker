@@ -12,7 +12,7 @@
         "utf8": "disable"
     },
     "Lua.workspace.library": [
-        "~\\.vscode\\extensions\\ketho.wow-api-0.22.1\\Annotations\\Core"
+        "~\\.vscode\\extensions\\ketho.wow-api-0.22.3\\Annotations\\Core"
     ],
     "Lua.type.weakUnionCheck": true,
     "Lua.diagnostics.globals": [
@@ -126,6 +126,32 @@
         "CreateFramePool",
         "AddonCompartmentFrame",
         "ChatFrame1",
-        "STANDARD_TEXT_FONT"
+        "STANDARD_TEXT_FONT",
+        "GameTooltip_AddQuestTimeToTooltip",
+        "UNKNOWN",
+        "GameTooltip_AddColoredLine",
+        "GameTooltip_AddBlankLineToTooltip",
+        "GameTooltip_SetTitle",
+        "GameTooltip_SetTooltipWaitingForData",
+        "QuestUtils_AddQuestTypeToTooltip",
+        "TOOLTIP_QUEST_REWARDS_STYLE_DEFAULT",
+        "GameTooltip_AddBlankLinesToTooltip",
+        "EmbeddedItemTooltip_SetSpellByFirstQuestReward",
+        "QUEST_REWARDS_CONTAINS_ONE_TIME_REP_BONUS",
+        "ColorManager",
+        "GameTooltip_ShowProgressBar",
+        "QuestUtils_AddQuestCurrencyRewardsToTooltip",
+        "MONEY",
+        "QUEST_REWARDS_IS_ONE_TIME_REP_BONUS",
+        "HONOR",
+        "QuestUtils_GetBestQualityItemRewardIndex",
+        "EmbeddedItemTooltip_Clear",
+        "EmbeddedItemTooltip_Hide",
+        "PERCENTAGE_STRING",
+        "WAR_MODE_BONUS_PERCENTAGE_XP_FORMAT",
+        "FlagsUtil",
+        "WAR_MODE_BONUS_PERCENTAGE_FORMAT",
+        "GameTooltip_ShowCompareItem",
+        "TooltipUtil"
     ]
 }
