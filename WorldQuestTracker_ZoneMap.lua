@@ -268,6 +268,33 @@ function WorldQuestTracker.CreateZoneWidget(index, name, parent, pinTemplate) --
 
 	--create the on enter/leave scale mini animation
 
+		-- try multiple calling conventions for different DF / WoW runtime APIs
+		local safeSetScale = function(anim, fromScale, toScale)
+			if (not anim) then
+				return
+			end
+			local try = function(fn, ...)
+				if (not fn) then return false end
+				local ok = pcall(fn, anim, ...)
+				if (ok) then return true end
+				-- try calling without passing anim as self
+				ok = pcall(fn, ...)
+				return ok
+			end
+
+			-- prefer SetScaleFrom/SetScaleTo
+			if (try(anim.SetScaleFrom, fromScale)) then
+				try(anim.SetScaleTo, toScale)
+				return
+			end
+
+			-- fallback to SetFromScale/SetToScale
+			if (try(anim.SetFromScale, fromScale)) then
+				try(anim.SetToScale, toScale)
+				return
+			end
+		end
+
 		--animations
 		local animaSettings = {
 			scaleZone = 0.10, --used when the widget is placed in a zone map
